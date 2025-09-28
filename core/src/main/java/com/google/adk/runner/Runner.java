@@ -319,9 +319,15 @@ public class Runner {
         if (runConfig.outputAudioTranscription() == null) {
           runConfigBuilder.setOutputAudioTranscription(AudioTranscriptionConfig.builder().build());
         }
+        if (runConfig.inputAudioTranscription() == null) {
+          runConfigBuilder.setInputAudioTranscription(AudioTranscriptionConfig.builder().build());
+        }
       } else if (!runConfig.responseModalities().contains(new Modality(Modality.Known.TEXT))) {
         if (runConfig.outputAudioTranscription() == null) {
           runConfigBuilder.setOutputAudioTranscription(AudioTranscriptionConfig.builder().build());
+        }
+        if (runConfig.inputAudioTranscription() == null) {
+          runConfigBuilder.setInputAudioTranscription(AudioTranscriptionConfig.builder().build());
         }
       }
     }
