@@ -310,24 +310,27 @@ public class Runner {
   private InvocationContext newInvocationContextForLive(
       Session session, Optional<LiveRequestQueue> liveRequestQueue, RunConfig runConfig) {
     RunConfig.Builder runConfigBuilder = RunConfig.builder(runConfig);
-    if (liveRequestQueue.isPresent()) {
+    if (liveRequestQueue.isPresent() && !this.agent.subAgents().isEmpty()) {
+      // Parity with Python: apply modality defaults and transcription settings
+      // only for multi-agent live scenarios.
       // Default to AUDIO modality if not specified.
       if (CollectionUtils.isNullOrEmpty(runConfig.responseModalities())) {
         runConfigBuilder.setResponseModalities(
             ImmutableList.of(new Modality(Modality.Known.AUDIO)));
         if (runConfig.outputAudioTranscription() == null) {
-          runConfigBuilder.setOutputAudioTranscription(AudioTranscriptionConfig.builder().build());
+          runConfigBuilder.setOutputAudioTranscription(
+              AudioTranscriptionConfig.builder().build());
         }
       } else if (!runConfig.responseModalities().contains(new Modality(Modality.Known.TEXT))) {
         if (runConfig.outputAudioTranscription() == null) {
-          runConfigBuilder.setOutputAudioTranscription(AudioTranscriptionConfig.builder().build());
+          runConfigBuilder.setOutputAudioTranscription(
+              AudioTranscriptionConfig.builder().build());
         }
       }
-      // Parity with Python: only auto-enable input transcription for multi-agent live scenarios
-      // so that text can be passed between agents. Otherwise leave it as-is.
-      boolean isMultiAgent = !this.agent.subAgents().isEmpty();
-      if (isMultiAgent && runConfig.inputAudioTranscription() == null) {
-        runConfigBuilder.setInputAudioTranscription(AudioTranscriptionConfig.builder().build());
+      // Need input transcription for agent transferring in live mode.
+      if (runConfig.inputAudioTranscription() == null) {
+        runConfigBuilder.setInputAudioTranscription(
+            AudioTranscriptionConfig.builder().build());
       }
     }
     return newInvocationContext(
