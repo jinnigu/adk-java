@@ -310,8 +310,7 @@ public class Runner {
   private InvocationContext newInvocationContextForLive(
       Session session, Optional<LiveRequestQueue> liveRequestQueue, RunConfig runConfig) {
     RunConfig.Builder runConfigBuilder = RunConfig.builder(runConfig);
-    if (!CollectionUtils.isNullOrEmpty(runConfig.responseModalities())
-        && liveRequestQueue.isPresent()) {
+    if (liveRequestQueue.isPresent()) {
       // Default to AUDIO modality if not specified.
       if (CollectionUtils.isNullOrEmpty(runConfig.responseModalities())) {
         runConfigBuilder.setResponseModalities(
@@ -319,16 +318,16 @@ public class Runner {
         if (runConfig.outputAudioTranscription() == null) {
           runConfigBuilder.setOutputAudioTranscription(AudioTranscriptionConfig.builder().build());
         }
-        if (runConfig.inputAudioTranscription() == null) {
-          runConfigBuilder.setInputAudioTranscription(AudioTranscriptionConfig.builder().build());
-        }
       } else if (!runConfig.responseModalities().contains(new Modality(Modality.Known.TEXT))) {
         if (runConfig.outputAudioTranscription() == null) {
           runConfigBuilder.setOutputAudioTranscription(AudioTranscriptionConfig.builder().build());
         }
-        if (runConfig.inputAudioTranscription() == null) {
-          runConfigBuilder.setInputAudioTranscription(AudioTranscriptionConfig.builder().build());
-        }
+      }
+      // Parity with Python: only auto-enable input transcription for multi-agent live scenarios
+      // so that text can be passed between agents. Otherwise leave it as-is.
+      boolean isMultiAgent = !this.agent.subAgents().isEmpty();
+      if (isMultiAgent && runConfig.inputAudioTranscription() == null) {
+        runConfigBuilder.setInputAudioTranscription(AudioTranscriptionConfig.builder().build());
       }
     }
     return newInvocationContext(
