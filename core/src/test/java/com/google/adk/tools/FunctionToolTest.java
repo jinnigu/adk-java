@@ -20,7 +20,9 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.google.adk.agents.InvocationContext;
-import com.google.adk.agents.RunConfig;
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.events.ToolConfirmation;
+import com.google.adk.sessions.InMemorySessionService;
 import com.google.adk.sessions.Session;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -34,7 +36,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -42,6 +44,25 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link FunctionTool}. */
 @RunWith(JUnit4.class)
 public final class FunctionToolTest {
+  private LlmAgent agent;
+  private InMemorySessionService sessionService;
+  private ToolContext toolContext;
+
+  @Before
+  public void setUp() {
+    agent = LlmAgent.builder().name("test-agent").build();
+    sessionService = new InMemorySessionService();
+    Session session =
+        sessionService.createSession("test-app", "test-user", null, "test-session").blockingGet();
+    InvocationContext invocationContext =
+        InvocationContext.builder()
+            .agent(agent)
+            .session(session)
+            .sessionService(sessionService)
+            .invocationId("invocation-id")
+            .build();
+    toolContext = ToolContext.builder(invocationContext).functionCallId("functionCallId").build();
+  }
 
   @Test
   public void create_withNonSerializableParameter_raisesIllegalArgumentException() {
@@ -68,6 +89,7 @@ public final class FunctionToolTest {
                         .properties(ImmutableMap.of())
                         .required(ImmutableList.of())
                         .build())
+                .response(Schema.builder().type("NULL").build())
                 .build());
   }
 
@@ -100,6 +122,7 @@ public final class FunctionToolTest {
                                     .build()))
                         .required(ImmutableList.of("first_param", "second_param"))
                         .build())
+                .response(Schema.builder().type("NULL").build())
                 .build());
   }
 
@@ -137,6 +160,7 @@ public final class FunctionToolTest {
                         .properties(ImmutableMap.of())
                         .required(ImmutableList.of())
                         .build())
+                .response(Schema.builder().type("NULL").build())
                 .build());
   }
 
@@ -231,22 +255,6 @@ public final class FunctionToolTest {
   @Test
   public void call_withAllSupportedParameterTypes() throws Exception {
     FunctionTool tool = FunctionTool.create(Functions.class, "returnAllSupportedParametersAsMap");
-    ToolContext toolContext =
-        ToolContext.builder(
-                new InvocationContext(
-                    /* sessionService= */ null,
-                    /* artifactService= */ null,
-                    /* memoryService= */ null,
-                    /* liveRequestQueue= */ Optional.empty(),
-                    /* branch= */ Optional.empty(),
-                    /* invocationId= */ null,
-                    /* agent= */ null,
-                    /* session= */ Session.builder("123").build(),
-                    /* userContent= */ Optional.empty(),
-                    /* runConfig= */ RunConfig.builder().build(),
-                    /* endInvocation= */ false))
-            .functionCallId("functionCallId")
-            .build();
 
     Map<String, Object> result =
         tool.runAsync(
@@ -323,6 +331,15 @@ public final class FunctionToolTest {
     Map<String, Object> result = tool.runAsync(ImmutableMap.of("pojo", pojo), null).blockingGet();
 
     assertThat(result).containsExactly("field1", "abc", "field2", 123);
+  }
+
+  @Test
+  public void call_withBooleanReturnValue_returnsMapWithResult() throws Exception {
+    FunctionTool tool = FunctionTool.create(Functions.class, "returnsBoolean");
+
+    Map<String, Object> result = tool.runAsync(ImmutableMap.of(), null).blockingGet();
+
+    assertThat(result).containsExactly("result", true);
   }
 
   @Test
@@ -579,22 +596,6 @@ public final class FunctionToolTest {
     Functions functions = new Functions();
     FunctionTool tool =
         FunctionTool.create(functions, "nonStaticReturnAllSupportedParametersAsMap");
-    ToolContext toolContext =
-        ToolContext.builder(
-                new InvocationContext(
-                    /* sessionService= */ null,
-                    /* artifactService= */ null,
-                    /* memoryService= */ null,
-                    /* liveRequestQueue= */ Optional.empty(),
-                    /* branch= */ Optional.empty(),
-                    /* invocationId= */ null,
-                    /* agent= */ null,
-                    /* session= */ Session.builder("123").build(),
-                    /* userContent= */ Optional.empty(),
-                    /* runConfig= */ null,
-                    /* endInvocation= */ false))
-            .functionCallId("functionCallId")
-            .build();
 
     Map<String, Object> result =
         tool.runAsync(
@@ -641,22 +642,6 @@ public final class FunctionToolTest {
     Method method = Functions.class.getMethod("returnsMap");
     FunctionTool tool =
         new FunctionTool(null, method, /* isLongRunning= */ false, /* requireConfirmation= */ true);
-    ToolContext toolContext =
-        ToolContext.builder(
-                new InvocationContext(
-                    /* sessionService= */ null,
-                    /* artifactService= */ null,
-                    /* memoryService= */ null,
-                    /* liveRequestQueue= */ Optional.empty(),
-                    /* branch= */ Optional.empty(),
-                    /* invocationId= */ null,
-                    /* agent= */ null,
-                    /* session= */ Session.builder("123").build(),
-                    /* userContent= */ Optional.empty(),
-                    /* runConfig= */ null,
-                    /* endInvocation= */ false))
-            .functionCallId("functionCallId")
-            .build();
 
     // First call, should request confirmation
     Map<String, Object> result = tool.runAsync(ImmutableMap.of(), toolContext).blockingGet();
@@ -685,22 +670,6 @@ public final class FunctionToolTest {
     Functions functions = new Functions();
     Method method = Functions.class.getMethod("nonStaticVoidReturnWithoutSchema");
     FunctionTool tool = FunctionTool.create(functions, method, /* requireConfirmation= */ true);
-    ToolContext toolContext =
-        ToolContext.builder(
-                new InvocationContext(
-                    /* sessionService= */ null,
-                    /* artifactService= */ null,
-                    /* memoryService= */ null,
-                    /* liveRequestQueue= */ Optional.empty(),
-                    /* branch= */ Optional.empty(),
-                    /* invocationId= */ null,
-                    /* agent= */ null,
-                    /* session= */ Session.builder("123").build(),
-                    /* userContent= */ Optional.empty(),
-                    /* runConfig= */ null,
-                    /* endInvocation= */ false))
-            .functionCallId("functionCallId")
-            .build();
 
     Map<String, Object> result = tool.runAsync(ImmutableMap.of(), toolContext).blockingGet();
     assertThat(result)
@@ -713,22 +682,6 @@ public final class FunctionToolTest {
   public void create_staticMethodWithConfirmation_requestsConfirmation() throws Exception {
     Method method = Functions.class.getMethod("voidReturnWithoutSchema");
     FunctionTool tool = FunctionTool.create(method, /* requireConfirmation= */ true);
-    ToolContext toolContext =
-        ToolContext.builder(
-                new InvocationContext(
-                    /* sessionService= */ null,
-                    /* artifactService= */ null,
-                    /* memoryService= */ null,
-                    /* liveRequestQueue= */ Optional.empty(),
-                    /* branch= */ Optional.empty(),
-                    /* invocationId= */ null,
-                    /* agent= */ null,
-                    /* session= */ Session.builder("123").build(),
-                    /* userContent= */ Optional.empty(),
-                    /* runConfig= */ null,
-                    /* endInvocation= */ false))
-            .functionCallId("functionCallId")
-            .build();
 
     Map<String, Object> result = tool.runAsync(ImmutableMap.of(), toolContext).blockingGet();
     assertThat(result)
@@ -742,22 +695,6 @@ public final class FunctionToolTest {
     FunctionTool tool =
         FunctionTool.create(
             Functions.class, "voidReturnWithoutSchema", /* requireConfirmation= */ true);
-    ToolContext toolContext =
-        ToolContext.builder(
-                new InvocationContext(
-                    /* sessionService= */ null,
-                    /* artifactService= */ null,
-                    /* memoryService= */ null,
-                    /* liveRequestQueue= */ Optional.empty(),
-                    /* branch= */ Optional.empty(),
-                    /* invocationId= */ null,
-                    /* agent= */ null,
-                    /* session= */ Session.builder("123").build(),
-                    /* userContent= */ Optional.empty(),
-                    /* runConfig= */ null,
-                    /* endInvocation= */ false))
-            .functionCallId("functionCallId")
-            .build();
 
     Map<String, Object> result = tool.runAsync(ImmutableMap.of(), toolContext).blockingGet();
     assertThat(result)
@@ -772,22 +709,6 @@ public final class FunctionToolTest {
     FunctionTool tool =
         FunctionTool.create(
             functions, "nonStaticVoidReturnWithoutSchema", /* requireConfirmation= */ true);
-    ToolContext toolContext =
-        ToolContext.builder(
-                new InvocationContext(
-                    /* sessionService= */ null,
-                    /* artifactService= */ null,
-                    /* memoryService= */ null,
-                    /* liveRequestQueue= */ Optional.empty(),
-                    /* branch= */ Optional.empty(),
-                    /* invocationId= */ null,
-                    /* agent= */ null,
-                    /* session= */ Session.builder("123").build(),
-                    /* userContent= */ Optional.empty(),
-                    /* runConfig= */ null,
-                    /* endInvocation= */ false))
-            .functionCallId("functionCallId")
-            .build();
 
     Map<String, Object> result = tool.runAsync(ImmutableMap.of(), toolContext).blockingGet();
     assertThat(result)
@@ -889,6 +810,10 @@ public final class FunctionToolTest {
 
     public static Single<Map<String, Object>> returnsSingleMap() {
       return Single.just(ImmutableMap.of("key", "value"));
+    }
+
+    public static Boolean returnsBoolean() {
+      return true;
     }
 
     public static PojoWithGettersAndSetters returnsPojo() {

@@ -34,7 +34,6 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.util.List;
-import java.util.Optional;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,6 +51,12 @@ public class McpToolsetTest {
   @Mock private ReadonlyContext mockReadonlyContext;
 
   private static final McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+
+  private static final ImmutableMap<String, Object> STDIO_SERVER_PARAMS =
+      ImmutableMap.of(
+          "command", "test-command",
+          "args", ImmutableList.of("arg1", "arg2"),
+          "env", ImmutableMap.of("KEY1", "value1"));
 
   @Test
   public void testMcpToolsetConfig_withStdioServerParams_parsesCorrectly() {
@@ -120,9 +125,25 @@ public class McpToolsetTest {
     ConfigurationException exception =
         assertThrows(ConfigurationException.class, () -> McpToolset.fromConfig(config, configPath));
 
-    assertThat(exception)
-        .hasMessageThat()
-        .contains("Exactly one of stdioServerParams or sseServerParams must be set");
+    assertThat(exception).hasMessageThat().containsMatch("Exactly one of .* must be set");
+  }
+
+  @Test
+  public void testFromConfig_bothStdioConnectionParamsAndSseParams_throwsConfigurationException() {
+    BaseTool.ToolArgsConfig args = new BaseTool.ToolArgsConfig();
+    args.put(
+        "stdioConnectionParams",
+        ImmutableMap.of(
+            "serverParams",
+            ImmutableMap.of("command", "test-command", "args", ImmutableList.of("arg1", "arg2"))));
+    args.put("sseServerParams", ImmutableMap.of("url", "http://localhost:8080"));
+    BaseTool.ToolConfig config = new BaseTool.ToolConfig("mcp_toolset", args);
+    String configPath = "/path/to/config.yaml";
+
+    ConfigurationException exception =
+        assertThrows(ConfigurationException.class, () -> McpToolset.fromConfig(config, configPath));
+
+    assertThat(exception).hasMessageThat().containsMatch("Exactly one of .* must be set");
   }
 
   @Test
@@ -135,20 +156,13 @@ public class McpToolsetTest {
     ConfigurationException exception =
         assertThrows(ConfigurationException.class, () -> McpToolset.fromConfig(config, configPath));
 
-    assertThat(exception)
-        .hasMessageThat()
-        .contains("Exactly one of stdioServerParams or sseServerParams must be set");
+    assertThat(exception).hasMessageThat().containsMatch("Exactly one of .* must be set");
   }
 
   @Test
   public void testFromConfig_validStdioParams_createsToolset() throws ConfigurationException {
     BaseTool.ToolArgsConfig args = new BaseTool.ToolArgsConfig();
-    args.put(
-        "stdioServerParams",
-        ImmutableMap.of(
-            "command", "test-command",
-            "args", ImmutableList.of("arg1", "arg2"),
-            "env", ImmutableMap.of("KEY1", "value1")));
+    args.put("stdioServerParams", STDIO_SERVER_PARAMS);
     args.put("toolFilter", ImmutableList.of("tool1", "tool2"));
 
     BaseTool.ToolConfig config = new BaseTool.ToolConfig("mcp_toolset", args);
@@ -177,6 +191,22 @@ public class McpToolsetTest {
 
     assertThat(toolset).isNotNull();
     // The toolset should be created successfully with SSE parameters
+  }
+
+  @Test
+  public void testFromConfig_validStdioConnectionParams_createsToolset()
+      throws ConfigurationException {
+    BaseTool.ToolArgsConfig args = new BaseTool.ToolArgsConfig();
+    args.put(
+        "stdioConnectionParams",
+        ImmutableMap.of("timeout", 10f, "serverParams", STDIO_SERVER_PARAMS));
+
+    BaseTool.ToolConfig config = new BaseTool.ToolConfig("mcp_toolset", args);
+    String configPath = "/path/to/config.yaml";
+
+    McpToolset toolset = McpToolset.fromConfig(config, configPath);
+
+    assertThat(toolset).isNotNull();
   }
 
   @Test
@@ -293,7 +323,7 @@ public class McpToolsetTest {
     when(mockMcpSyncClient.listTools()).thenReturn(mockResult);
 
     McpToolset toolset =
-        new McpToolset(mockMcpSessionManager, JsonBaseModel.getMapper(), Optional.of(toolFilter));
+        new McpToolset(mockMcpSessionManager, JsonBaseModel.getMapper(), toolFilter);
 
     List<BaseTool> tools = toolset.getTools(mockReadonlyContext).toList().blockingGet();
 
@@ -309,8 +339,7 @@ public class McpToolsetTest {
     when(mockMcpSessionManager.createSession()).thenReturn(mockMcpSyncClient);
     when(mockMcpSyncClient.listTools()).thenThrow(new RuntimeException("Test Exception"));
 
-    McpToolset toolset =
-        new McpToolset(mockMcpSessionManager, JsonBaseModel.getMapper(), Optional.empty());
+    McpToolset toolset = new McpToolset(mockMcpSessionManager, JsonBaseModel.getMapper());
 
     toolset
         .getTools(mockReadonlyContext)
@@ -331,8 +360,7 @@ public class McpToolsetTest {
         .thenThrow(new RuntimeException("Attempt 2 failed"))
         .thenReturn(mockResult);
 
-    McpToolset toolset =
-        new McpToolset(mockMcpSessionManager, JsonBaseModel.getMapper(), Optional.empty());
+    McpToolset toolset = new McpToolset(mockMcpSessionManager, JsonBaseModel.getMapper());
 
     List<BaseTool> tools = toolset.getTools(mockReadonlyContext).toList().blockingGet();
 
