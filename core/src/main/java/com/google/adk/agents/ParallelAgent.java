@@ -15,6 +15,8 @@
  */
 package com.google.adk.agents;
 
+import static com.google.common.base.Strings.isNullOrEmpty;
+
 import com.google.adk.agents.ConfigAgentUtils.ConfigurationException;
 import com.google.adk.events.Event;
 import io.reactivex.rxjava3.core.Flowable;
@@ -106,6 +108,25 @@ public class ParallelAgent extends BaseAgent {
   }
 
   /**
+   * Sets the branch for the current agent in the invocation context.
+   *
+   * <p>Appends the agent name to the current branch, or sets it if undefined.
+   *
+   * @param currentAgent Current agent.
+   * @param invocationContext Invocation context to update.
+   * @return A new invocation context with branch set.
+   */
+  private static InvocationContext setBranchForCurrentAgent(
+      BaseAgent currentAgent, InvocationContext invocationContext) {
+    String branch = invocationContext.branch().orElse(null);
+    if (isNullOrEmpty(branch)) {
+      return invocationContext.toBuilder().branch(currentAgent.name()).build();
+    } else {
+      return invocationContext.toBuilder().branch(branch + "." + currentAgent.name()).build();
+    }
+  }
+
+  /**
    * Runs sub-agents in parallel and emits their events.
    *
    * <p>Sets the branch and merges event streams from all sub-agents.
@@ -120,9 +141,10 @@ public class ParallelAgent extends BaseAgent {
       return Flowable.empty();
     }
 
+    var updatedInvocationContext = setBranchForCurrentAgent(this, invocationContext);
     List<Flowable<Event>> agentFlowables = new ArrayList<>();
     for (BaseAgent subAgent : currentSubAgents) {
-      agentFlowables.add(subAgent.runAsync(invocationContext).subscribeOn(scheduler));
+      agentFlowables.add(subAgent.runAsync(updatedInvocationContext).subscribeOn(scheduler));
     }
     return Flowable.merge(agentFlowables);
   }
